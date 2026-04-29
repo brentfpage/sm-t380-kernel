@@ -292,13 +292,17 @@ static void compute_tt_budget(u8 budget_table[EHCI_BANDWIDTH_SIZE],
 			for (uf = ps->phase_uf; uf < 8; ++uf) {
 				x += budget_line[uf];
 
-				/* Each microframe lasts 125 us */
-				if (x <= 125) {
+                /* Given the inclusion of worst-case bit-stuffing time
+                 * in tt_usecs, the transactions (complete and/or
+                 * partial) budgeted for a given 125 us microframe can
+                 * have a cumulative tt_usecs (x) as large as 145 us and
+                 * still possibly fit into the microframe.*/
+				if (x <= 145) {
 					budget_line[uf] = x;
 					break;
 				} else {
-					budget_line[uf] = 125;
-					x -= 125;
+					budget_line[uf] = 145;
+					x -= 145;
 				}
 			}
 		}
@@ -340,7 +344,7 @@ static inline unsigned char tt_start_uframe(struct ehci_hcd *ehci, __hc32 mask)
 }
 
 static const unsigned char
-max_tt_usecs[] = { 125, 125, 125, 125, 125, 125, 30, 0 };
+max_tt_usecs[] = { 145, 145, 145, 145, 145, 145, 35, 0 };
 
 /* carryover low/fullspeed bandwidth that crosses uframe boundries */
 static inline void carryover_tt_bandwidth(unsigned short tt_usecs[8])
