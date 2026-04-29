@@ -19,6 +19,6 @@ alias python='python2'
 mkdir ${OUT_DIR}
 
 make ${COMMON_ARGS} gta2swifi_sea_open_defconfig
-make -j64 ${COMMON_ARGS}
+make -j$(nproc --all) ${COMMON_ARGS}
 
 cp ${OUT_DIR}/arch/arm/boot/zImage $(pwd)/arch/arm/boot/zImage
