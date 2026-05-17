@@ -1417,17 +1417,38 @@ sitd_slot_ok (
 	struct ehci_tt		*tt
 )
 {
-	unsigned		mask, tmp;
+	unsigned		mask, c_mask2, tmp;
 	unsigned		frame, uf;
 
 	mask = stream->ps.cs_mask << (uframe & 7);
+    c_mask2 = mask >> 16;
+    mask = mask & 0xffff;
+    if((c_mask2 & 1) && (c_mask2 & 1<<1) && (c_mask2 & 1<<2)) {
+        /* if BuFrame6 is the last uframe in which a transaction is budgeted,
+         * the transaction will initially be configured to have CSPLITS in
+         * BuFrame7 as well as BuFrames 0 and 1 of the following frame
+         * (HuFrames 0,1,2) */
+        /* below: usb2 spec 11.18.4.3.c paragraph 2 */
+        if(mask[0]) {
+            c_mask2 = 1; 
+        } else {
+            c_mask2 = 1<<2-1;
+        }
+    } else if ((c_mask2 & 1) && (c_mask2 & 1<<1)) {
+        /* if BuFrame5 is the last uframe in which a transaction is budgeted,
+         * the transaction will initially be configured to have CSPLITS in
+         * BuFrames 6 and 7 as well as BuFrame 0 of the following frame
+         * (HuFrames 7,0,1) */
+        /* below: usb2 spec 11.18.4.3.c paragraph 1 */
+        if(mask[0]) {
+            c_mask2 = 1; 
+        }
+    }
+    if((c_mask2 & mask & 1<<1))
+        return 0; /* ehci1 4.12.3.1 */
 
 	/* for OUT, don't wrap SSPLIT into H-microframe 7 */
 	if (((stream->ps.cs_mask & 0xff) << (uframe & 7)) >= (1 << 7))
-		return 0;
-
-	/* for IN, don't wrap CSPLIT into the next frame */
-	if (mask & ~0xffff)
 		return 0;
 
 	/* check bandwidth */
@@ -1479,8 +1500,10 @@ sitd_slot_ok (
 		uframe += stream->ps.bw_uperiod;
 	} while (uframe < EHCI_BANDWIDTH_SIZE);
 
-	stream->ps.cs_mask <<= uframe & 7;
+	stream->ps.cs_mask = mask;
+	stream->ps.c_mask2 = c_mask2;
 	stream->splits = cpu_to_hc32(ehci, stream->ps.cs_mask);
+	stream->c_splits2 = cpu_to_hc32(ehci, stream->ps.c_mask2);
 	return 1;
 }
 
@@ -2079,13 +2102,13 @@ sitd_urb_transaction (
 
 	/* allocate/init sITDs */
 	spin_lock_irqsave (&ehci->lock, flags);
-	for (i = 0; i < urb->number_of_packets; i++) {
-
-		/* NOTE:  for now, we don't try to handle wraparound cases
-		 * for IN (using sitd->hw_backpointer, like a FSTN), which
-		 * means we never need two sitds for full speed packets.
-		 */
-
+	for (i = 0; i < 2 * urb->number_of_packets; i++) {
+        /* use 2 * number_of_packets to accommodate frame-hopping CSPLITS. if
+         * there are no such CSPLITS OR if the packet interval is 1 frame
+         * (meaning frame-hopping CSPLITS don't require an extra sitd, ehci
+         * spec 1.0 4.12.3.4), then more sitds than needed are allocated by
+         * this loop.  Excess sitds are added to the free list later
+         */
 		/*
 		 * Use siTDs from the free list, but not siTDs that may
 		 * still be in use by the hardware.
@@ -2137,12 +2160,24 @@ sitd_patch(
 {
 	struct ehci_iso_packet	*uf = &iso_sched->packet [index];
 	u64			bufp = uf->bufp;
+    __hc32      transaction;
 
 	sitd->hw_next = EHCI_LIST_END(ehci);
 	sitd->hw_fullspeed_ep = stream->address;
-	sitd->hw_uframe = stream->splits;
-	sitd->hw_results = uf->transaction;
-	sitd->hw_backpointer = EHCI_LIST_END(ehci);
+	sitd->hw_backpointer = cpu_to_hc32(ehci, sitd->backpointer_sitd_dma); 
+    transaction = uf->transaction;
+
+    if(sitd->backpointer_sitd_dma==1) { /* null backpointer */
+        stid->hw_uframe=stream->splits;
+    } else {
+        if(stream->ps->period==1) {
+            sitd->hw_uframe=stream->splits|stream->c_splits2;
+        } else  {
+            sitd->hw_uframe=stream->c_splits2;
+        }
+        transaction |= SITD_STS_STS; /* start in Do Complete Split mode, ehci1 4.12.3.3.2.1*/
+    }
+	sitd->hw_results = transaction;
 
 	bufp = uf->bufp;
 	sitd->hw_buf[0] = cpu_to_hc32(ehci, bufp);
@@ -2175,17 +2210,23 @@ static void sitd_link_urb(
 	struct ehci_iso_stream	*stream
 )
 {
-	int			packet;
+	int			i;
 	unsigned		next_uframe;
 	struct ehci_iso_sched	*sched = urb->hcpriv;
 	struct ehci_sitd	*sitd;
+	struct ehci_sitd	*sitd_before;
 
 	next_uframe = stream->next_uframe;
 
-	if (list_empty(&stream->td_list))
+	if (list_empty(&stream->td_list)) {
 		/* usbfs ignores TT bandwidth */
 		ehci_to_hcd(ehci)->self.bandwidth_allocated
 				+= stream->bandwidth;
+        sitd_before = NULL;
+    } else {
+        sitd_before = list_last_entry(sched->td_list,
+                struct ehci_sitd, sitd_list);
+    }
 
 	if (ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs == 0) {
 		if (ehci->amd_pll_fix == 1)
@@ -2195,9 +2236,9 @@ static void sitd_link_urb(
 	ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs++;
 
 	/* fill sITDs frame by frame */
-	for (packet = sched->first_packet, sitd = NULL;
-			packet < urb->number_of_packets;
-			packet++) {
+	for (i = sched->first_packet, sitd = NULL;
+			i < 2 * urb->number_of_packets;
+			i++) {
 
 		/* ASSERT:  we have all necessary sitds */
 		BUG_ON (list_empty (&sched->td_list));
@@ -2206,15 +2247,40 @@ static void sitd_link_urb(
 
 		sitd = list_entry (sched->td_list.next,
 				struct ehci_sitd, sitd_list);
+        if((i>=number_of_packets)&&((stream->ps->period==1)||(!(stream->c_mask2)))) {
+            /* 
+             * no frame-hopping CSPLITS OR the period is 1, so such CSPLITS are
+             * put into the sitd for the next transfer ; in both cases
+             * #sitds=#transfers, so move the surplus sitd to the free list
+             */
+            list_move_tail(&sitd->sitd_list, &stream->free_list);
+            continue;
+        }
+        if(stream->c_mask2 && !list_empty(&stream->td_list) &&
+                ((stream->ps->period==1)||(i%2==1)) ) {
+            sitd->backpointer_sitd_dma = sitd_before.sitd_dma;
+        } else {
+            sitd->backpointer_sitd_dma = 1;
+        }
 		list_move_tail (&sitd->sitd_list, &stream->td_list);
 		sitd->stream = stream;
 		sitd->urb = urb;
 
-		sitd_patch(ehci, stream, sitd, sched, packet);
+		sitd_patch(ehci, stream, sitd, sched, i);
 		sitd_link(ehci, (next_uframe >> 3) & (ehci->periodic_size - 1),
 				sitd);
 
-		next_uframe += stream->uperiod;
+        if(stream->c_mask2 && (stream->ps->period!=1)) {
+            if((i%2)==0) {
+                /* next sitd only has frame-hopping CSPLITS */
+                next_uframe += 8;
+            } else if ((i%2)==1) {
+                next_uframe += stream->uperiod - 8;
+            }
+        } else {
+            next_uframe += stream->uperiod;
+        }
+        sitd_before = sitd;
 	}
 	stream->next_uframe = next_uframe & (mod - 1);
 
