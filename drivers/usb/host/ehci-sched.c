@@ -1429,10 +1429,10 @@ sitd_slot_ok (
          * BuFrame7 as well as BuFrames 0 and 1 of the following frame
          * (HuFrames 0,1,2) */
         /* below: usb2 spec 11.18.4.3.c paragraph 2 */
-        if(mask[0]) {
+        if(mask & 1) {
             c_mask2 = 1; 
         } else {
-            c_mask2 = 1<<2-1;
+            c_mask2 = (1<<2)-1;
         }
     } else if ((c_mask2 & 1) && (c_mask2 & 1<<1)) {
         /* if BuFrame5 is the last uframe in which a transaction is budgeted,
@@ -1440,7 +1440,7 @@ sitd_slot_ok (
          * BuFrames 6 and 7 as well as BuFrame 0 of the following frame
          * (HuFrames 7,0,1) */
         /* below: usb2 spec 11.18.4.3.c paragraph 1 */
-        if(mask[0]) {
+        if(mask & 1) {
             c_mask2 = 1; 
         }
     }
@@ -2168,9 +2168,9 @@ sitd_patch(
     transaction = uf->transaction;
 
     if(sitd->backpointer_sitd_dma==1) { /* null backpointer */
-        stid->hw_uframe=stream->splits;
+        sitd->hw_uframe=stream->splits;
     } else {
-        if(stream->ps->period==1) {
+        if(stream->ps.period==1) {
             sitd->hw_uframe=stream->splits|stream->c_splits2;
         } else  {
             sitd->hw_uframe=stream->c_splits2;
@@ -2224,7 +2224,7 @@ static void sitd_link_urb(
 				+= stream->bandwidth;
         sitd_before = NULL;
     } else {
-        sitd_before = list_last_entry(sched->td_list,
+        sitd_before = list_last_entry(&sched->td_list,
                 struct ehci_sitd, sitd_list);
     }
 
@@ -2247,7 +2247,7 @@ static void sitd_link_urb(
 
 		sitd = list_entry (sched->td_list.next,
 				struct ehci_sitd, sitd_list);
-        if((i>=number_of_packets)&&((stream->ps->period==1)||(!(stream->c_mask2)))) {
+        if((i>=urb->number_of_packets)&&((stream->ps.period==1)||(!(stream->ps.c_mask2)))) {
             /* 
              * no frame-hopping CSPLITS OR the period is 1, so such CSPLITS are
              * put into the sitd for the next transfer ; in both cases
@@ -2256,9 +2256,9 @@ static void sitd_link_urb(
             list_move_tail(&sitd->sitd_list, &stream->free_list);
             continue;
         }
-        if(stream->c_mask2 && !list_empty(&stream->td_list) &&
-                ((stream->ps->period==1)||(i%2==1)) ) {
-            sitd->backpointer_sitd_dma = sitd_before.sitd_dma;
+        if(stream->ps.c_mask2 && !list_empty(&stream->td_list) &&
+                ((stream->ps.period==1)||(i%2==1)) ) {
+            sitd->backpointer_sitd_dma = sitd_before->sitd_dma;
         } else {
             sitd->backpointer_sitd_dma = 1;
         }
@@ -2270,7 +2270,7 @@ static void sitd_link_urb(
 		sitd_link(ehci, (next_uframe >> 3) & (ehci->periodic_size - 1),
 				sitd);
 
-        if(stream->c_mask2 && (stream->ps->period!=1)) {
+        if(stream->ps.c_mask2 && (stream->ps.period!=1)) {
             if((i%2)==0) {
                 /* next sitd only has frame-hopping CSPLITS */
                 next_uframe += 8;
