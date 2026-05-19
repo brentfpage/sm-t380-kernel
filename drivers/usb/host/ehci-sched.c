@@ -2210,7 +2210,7 @@ static void sitd_link_urb(
 	struct ehci_iso_stream	*stream
 )
 {
-	int			i;
+	int			i, packet;
 	unsigned		next_uframe;
 	struct ehci_iso_sched	*sched = urb->hcpriv;
 	struct ehci_sitd	*sitd;
@@ -2328,7 +2328,7 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	urb_index = sitd->index;
 	desc = &urb->iso_frame_desc [urb_index];
 	t = hc32_to_cpup(ehci, &sitd->hw_results);
-    has_ssplits = sitd->hw_frame & 0x00ff;
+    has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
 
 	/* report transfer status */
 	if (unlikely(t & SITD_ERRS)) {
