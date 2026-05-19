@@ -2266,7 +2266,14 @@ static void sitd_link_urb(
 		sitd->stream = stream;
 		sitd->urb = urb;
 
-		sitd_patch(ehci, stream, sitd, sched, i);
+        if(stream->ps.c_mask2 && (stream->ps.period!=1)) {
+             packet = i/2;
+             sitd->last_in_urb = i==(2*urb->number_of_packets - 1);
+        } else {
+             packet = i;
+             sitd->last_in_urb = i==(urb->number_of_packets-1);
+        }
+		sitd_patch(ehci, stream, sitd, sched, packet);
 		sitd_link(ehci, (next_uframe >> 3) & (ehci->periodic_size - 1),
 				sitd);
 
@@ -2316,10 +2323,12 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	struct ehci_iso_stream			*stream = sitd->stream;
 	struct usb_device			*dev;
 	bool					retval = false;
+    bool                has_ssplits;
 
 	urb_index = sitd->index;
 	desc = &urb->iso_frame_desc [urb_index];
 	t = hc32_to_cpup(ehci, &sitd->hw_results);
+    has_ssplits = sitd->hw_frame & 0x00ff;
 
 	/* report transfer status */
 	if (unlikely(t & SITD_ERRS)) {
@@ -2332,7 +2341,7 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 			desc->status = -EOVERFLOW;
 		else /* XACT, MMF, etc */
 			desc->status = -EPROTO;
-	} else if (unlikely(t & SITD_STS_ACTIVE)) {
+	} else if (unlikely((t & SITD_STS_ACTIVE) && has_ssplits)) {
 		/* URB was too late */
 		urb->error_count++;
 	} else {
@@ -2342,7 +2351,7 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	}
 
 	/* handle completion now? */
-	if ((urb_index + 1) != urb->number_of_packets)
+	if (!sitd->last_in_urb)
 		goto done;
 
 	/* ASSERT: it's really the last sitd for this urb

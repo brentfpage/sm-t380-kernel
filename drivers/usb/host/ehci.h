@@ -583,6 +583,7 @@ struct ehci_sitd {
 	dma_addr_t		backpointer_sitd_dma;
 	union ehci_shadow	sitd_next;	/* ptr to periodic q entry */
 
+    bool            last_in_urb;
 	struct urb		*urb;
 	struct ehci_iso_stream	*stream;	/* endpoint's queue */
 	struct list_head	sitd_list;	/* list of stream's sitds */
