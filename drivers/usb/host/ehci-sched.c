@@ -2169,7 +2169,7 @@ sitd_patch(
 
     if(sitd->backpointer_sitd_dma==1) { /* null backpointer */
         sitd->hw_uframe=stream->splits;
-    } else {
+    } else { 
         if(stream->ps.period==1) {
             sitd->hw_uframe=stream->splits|stream->c_splits2;
         } else  {
@@ -2331,7 +2331,8 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
     has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
 
 	/* report transfer status */
-	if (unlikely(t & SITD_ERRS)) {
+    if(!has_ssplits) { /* just contains frame-hopping CSPLITS */
+    } else if (unlikely(t & SITD_ERRS)) {
 		urb->error_count++;
 		if (t & SITD_STS_DBE)
 			desc->status = usb_pipein (urb->pipe)
@@ -2341,7 +2342,7 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 			desc->status = -EOVERFLOW;
 		else /* XACT, MMF, etc */
 			desc->status = -EPROTO;
-	} else if (unlikely((t & SITD_STS_ACTIVE) && has_ssplits)) {
+	} else if (unlikely(t & SITD_STS_ACTIVE)) {
 		/* URB was too late */
 		urb->error_count++;
 	} else {
