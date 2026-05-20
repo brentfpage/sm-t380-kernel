@@ -1501,7 +1501,7 @@ sitd_slot_ok (
 	} while (uframe < EHCI_BANDWIDTH_SIZE);
 
 	stream->ps.cs_mask = mask;
-	stream->ps.c_mask2 = c_mask2;
+	stream->ps.c_mask2 = c_mask2 << 8;
 	stream->splits = cpu_to_hc32(ehci, stream->ps.cs_mask);
 	stream->c_splits2 = cpu_to_hc32(ehci, stream->ps.c_mask2);
 	return 1;
