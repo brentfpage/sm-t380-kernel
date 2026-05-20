@@ -2332,6 +2332,7 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 
 	/* report transfer status */
     if(!has_ssplits) { /* just contains frame-hopping CSPLITS */
+		desc->status = 0; /* actual completion status reported by previous sitd */
     } else if (unlikely(t & SITD_ERRS)) {
 		urb->error_count++;
 		if (t & SITD_STS_DBE)
