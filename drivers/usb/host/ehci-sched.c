@@ -408,13 +408,13 @@ static int tt_available (
 		if (max_tt_usecs[uframe] <= tt_usecs[uframe])
 			return 0;
 
-		/* special case for isoc transfers larger than 125us:
+		/* special case for isoc transfers larger than max_tt_usecs:
 		 * the first and each subsequent fully used uframe
 		 * must be empty, so as to not illegally delay
 		 * already scheduled transactions
 		 */
-		if (125 < usecs) {
-			int ufs = (usecs / 125);
+		if (145 < usecs) {
+			int ufs = (usecs / 145);
 
 			for (i = uframe; i < (uframe + ufs) && i < 8; i++)
 				if (0 < tt_usecs[i])

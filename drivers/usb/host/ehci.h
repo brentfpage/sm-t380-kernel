@@ -64,7 +64,7 @@ struct ehci_per_sched {
 	struct list_head	ps_list;	/* node on ehci_tt's ps_list */
 	u16			tt_usecs;	/* time on the FS/LS bus */
 	u16			cs_mask;	/* C-mask and S-mask bytes */
-	u8			c_mask2;	/* C-mask for 2nd frame of a frame-spanning TT-iso transfer */
+	u16			c_mask2;	/* C-mask for 2nd frame of a frame-spanning TT-iso transfer */
 	u16			period;		/* actual period in frames */
 	u16			phase;		/* actual phase, frame part */
 	u8			bw_phase;	/* same, for bandwidth
