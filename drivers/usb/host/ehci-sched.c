@@ -2080,41 +2080,6 @@ sitd_sched_init(
 	}
 }
 
-static int
-sitd_urb_transaction (
-	struct ehci_iso_stream	*stream,
-	struct ehci_hcd		*ehci,
-	struct urb		*urb,
-	gfp_t			mem_flags
-)
-{
-	struct ehci_sitd	*sitd;
-	dma_addr_t		sitd_dma;
-	int			i;
-	struct ehci_iso_sched	*iso_sched;
-	unsigned long		flags;
-    int         status;
-
-	iso_sched = iso_sched_alloc (urb->number_of_packets, mem_flags);
-	if (iso_sched == NULL)
-		return -ENOMEM;
-
-	sitd_sched_init(ehci, iso_sched, stream, urb);
-	spin_lock_irqsave (&ehci->lock, flags);
-    status = allocate_sitds(stream, ehci, urb, mem_flags);
-    if(status) {
-        spin_unlock_irqrestore(&ehci->lock, flags);
-        return status;
-    }
-
-	/* temporarily store schedule info in hcpriv */
-	urb->hcpriv = iso_sched;
-	urb->error_count = 0;
-
-	spin_unlock_irqrestore (&ehci->lock, flags);
-	return 0;
-}
-
 static int allocate_sitds(
 	struct ehci_iso_stream	*stream,
 	struct ehci_hcd		*ehci,
@@ -2157,6 +2122,41 @@ static int allocate_sitds(
 		list_add (&sitd->sitd_list, &iso_sched->td_list);
 	}
     return 0;
+}
+
+static int
+sitd_urb_transaction (
+	struct ehci_iso_stream	*stream,
+	struct ehci_hcd		*ehci,
+	struct urb		*urb,
+	gfp_t			mem_flags
+)
+{
+	struct ehci_sitd	*sitd;
+	dma_addr_t		sitd_dma;
+	int			i;
+	struct ehci_iso_sched	*iso_sched;
+	unsigned long		flags;
+    int         status;
+
+	iso_sched = iso_sched_alloc (urb->number_of_packets, mem_flags);
+	if (iso_sched == NULL)
+		return -ENOMEM;
+
+	sitd_sched_init(ehci, iso_sched, stream, urb);
+	spin_lock_irqsave (&ehci->lock, flags);
+    status = allocate_sitds(stream, ehci, urb, mem_flags);
+    if(status) {
+        spin_unlock_irqrestore(&ehci->lock, flags);
+        return status;
+    }
+
+	/* temporarily store schedule info in hcpriv */
+	urb->hcpriv = iso_sched;
+	urb->error_count = 0;
+
+	spin_unlock_irqrestore (&ehci->lock, flags);
+	return 0;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -2205,6 +2205,33 @@ sitd_patch(
 static inline void
 sitd_link (struct ehci_hcd *ehci, unsigned frame, struct ehci_sitd *sitd)
 {
+    __hc32          type, *hw_p;
+
+	sitd->hw_next = EHCI_LIST_END(ehci);
+	sitd->frame = frame;
+
+    hw_p = &ehci->periodic [frame];
+    type = Q_NEXT_TYPE(ehci, *hw_p);
+
+    switch (hc32_to_cpu(ehci, type)) {
+        case Q_TYPE_ITD:
+            ehci->pshadow [frame].itd->itd_next = sitd;
+            ehci->pshadow [frame].itd->hw_next = sitd->sitd_dma;
+            break;
+        case Q_TYPE_SITD:
+            ehci->pshadow [frame].sitd->sitd_next = sitd;
+            ehci->pshadow [frame].sitd->hw_next = sitd->sitd_dma;
+            break;
+        case Q_TYPE_QH:
+        case Q_TYPE_FSTN:
+
+        default:
+            ehci_dbg(ehci, "sitd_link corrupt type %d frame %d shadow %pK\n",
+                type, frame, q.ptr);
+        default:
+
+    
+
 	/* note: sitd ordering could matter (CSPLIT then SSPLIT) */
 	sitd->sitd_next = ehci->pshadow [frame];
 	sitd->hw_next = ehci->periodic [frame];
@@ -2212,6 +2239,9 @@ sitd_link (struct ehci_hcd *ehci, unsigned frame, struct ehci_sitd *sitd)
 	sitd->frame = frame;
 	wmb ();
 	ehci->periodic[frame] = cpu_to_hc32(ehci, sitd->sitd_dma | Q_TYPE_SITD);
+
+// 	wmb ();
+// 	ehci->periodic[frame] = cpu_to_hc32(ehci, sitd->sitd_dma | Q_TYPE_SITD);
 }
 
 /* fit urb's sitds into the selected schedule slot; activate as needed */
