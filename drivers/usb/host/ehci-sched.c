@@ -2102,8 +2102,10 @@ sitd_urb_transaction (
 	sitd_sched_init(ehci, iso_sched, stream, urb);
 	spin_lock_irqsave (&ehci->lock, flags);
     status = allocate_sitds(stream, ehci, urb, mem_flags);
-    if(status)
-        return status
+    if(status) {
+        spin_unlock_irqrestore(&ehci->lock, flags);
+        return status;
+    }
 
 	/* temporarily store schedule info in hcpriv */
 	urb->hcpriv = iso_sched;
@@ -2144,8 +2146,8 @@ static int allocate_sitds(
 			spin_lock_irqsave (&ehci->lock, flags);
 			if (!sitd) {
 				iso_sched_free(stream, iso_sched);
-				spin_unlock_irqrestore(&ehci->lock, flags);
-				return -ENOMEM;
+                /* ehci->lock should be released by the caller */
+				return -ENOMEM; 
 			}
 		}
 
@@ -2413,6 +2415,7 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
 	gfp_t mem_flags)
 {
 	int			status = -EINVAL;
+	int			status2 = 0;
 	unsigned long		flags;
 	struct ehci_iso_stream	*stream;
 
@@ -2458,13 +2461,14 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
         if(stream->ps->c_mask2 && stream->ps->period!=1) {
              // stream has frame-hopping CSPLITS and period isn't 1:
              // 2 sitds required for each packet
-            allocate_sitds(stream, ehci, urb, mem_flags);
+            status2 = allocate_sitds(stream, ehci, urb, mem_flags);
         }
 		sitd_link_urb (ehci, urb, ehci->periodic_size << 3, stream);
 	} else if (status > 0) {
 		status = 0;
 		ehci_urb_done(ehci, urb, 0);
-	} else {
+	}
+    if(status<0 || status2<0)
 		usb_hcd_unlink_urb_from_ep(ehci_to_hcd(ehci), urb);
 	}
  done_not_linked:
