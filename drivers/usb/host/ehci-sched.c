@@ -2093,22 +2093,38 @@ sitd_urb_transaction (
 	int			i;
 	struct ehci_iso_sched	*iso_sched;
 	unsigned long		flags;
+    int         status;
 
 	iso_sched = iso_sched_alloc (urb->number_of_packets, mem_flags);
 	if (iso_sched == NULL)
 		return -ENOMEM;
 
 	sitd_sched_init(ehci, iso_sched, stream, urb);
-
-	/* allocate/init sITDs */
 	spin_lock_irqsave (&ehci->lock, flags);
-	for (i = 0; i < 2 * urb->number_of_packets; i++) {
-        /* use 2 * number_of_packets to accommodate frame-hopping CSPLITS. if
-         * there are no such CSPLITS OR if the packet interval is 1 frame
-         * (meaning frame-hopping CSPLITS don't require an extra sitd, ehci
-         * spec 1.0 4.12.3.4), then more sitds than needed are allocated by
-         * this loop.  Excess sitds are added to the free list later
-         */
+    status = allocate_sitds(stream, ehci, urb, mem_flags);
+    if(status)
+        return status
+
+	/* temporarily store schedule info in hcpriv */
+	urb->hcpriv = iso_sched;
+	urb->error_count = 0;
+
+	spin_unlock_irqrestore (&ehci->lock, flags);
+	return 0;
+}
+
+static int allocate_sitds(
+	struct ehci_iso_stream	*stream,
+	struct ehci_hcd		*ehci,
+	struct urb		*urb,
+	gfp_t			mem_flags
+    )
+{
+	// caller must hold ehci->lock!
+	int			i;
+	unsigned long		flags;
+	/* allocate/init sITDs */
+	for (i = 0; i < urb->number_of_packets; i++) {
 		/*
 		 * Use siTDs from the free list, but not siTDs that may
 		 * still be in use by the hardware.
@@ -2138,13 +2154,7 @@ sitd_urb_transaction (
 		sitd->frame = NO_FRAME;
 		list_add (&sitd->sitd_list, &iso_sched->td_list);
 	}
-
-	/* temporarily store schedule info in hcpriv */
-	urb->hcpriv = iso_sched;
-	urb->error_count = 0;
-
-	spin_unlock_irqrestore (&ehci->lock, flags);
-	return 0;
+    return 0;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -2215,6 +2225,7 @@ static void sitd_link_urb(
 	struct ehci_iso_sched	*sched = urb->hcpriv;
 	struct ehci_sitd	*sitd;
 	struct ehci_sitd	*sitd_before;
+    int        sitd_mult;
 
 	next_uframe = stream->next_uframe;
 
@@ -2235,9 +2246,19 @@ static void sitd_link_urb(
 
 	ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs++;
 
+    if(stream->ps.c_mask2 && stream->ps.period==1)
+        /* 
+         * there are frame-hopping CSPLITS and the period is 1,
+         * so these CSPLITS require an extra sitd for each packet
+         */
+        sitd_mult = 2;
+    else
+        sitd_mult = 1;
+
+
 	/* fill sITDs frame by frame */
 	for (i = sched->first_packet, sitd = NULL;
-			i < 2 * urb->number_of_packets;
+			i < sitd_mult * urb->number_of_packets;
 			i++) {
 
 		/* ASSERT:  we have all necessary sitds */
@@ -2247,15 +2268,6 @@ static void sitd_link_urb(
 
 		sitd = list_entry (sched->td_list.next,
 				struct ehci_sitd, sitd_list);
-        if((i>=urb->number_of_packets)&&((stream->ps.period==1)||(!(stream->ps.c_mask2)))) {
-            /* 
-             * no frame-hopping CSPLITS OR the period is 1, so such CSPLITS are
-             * put into the sitd for the next transfer ; in both cases
-             * #sitds=#transfers, so move the surplus sitd to the free list
-             */
-            list_move_tail(&sitd->sitd_list, &stream->free_list);
-            continue;
-        }
         if(stream->ps.c_mask2 && !list_empty(&stream->td_list) &&
                 ((stream->ps.period==1)||(i%2==1)) ) {
             sitd->backpointer_sitd_dma = sitd_before->sitd_dma;
@@ -2443,6 +2455,11 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
 		goto done_not_linked;
 	status = iso_stream_schedule(ehci, urb, stream);
 	if (likely(status == 0)) {
+        if(stream->ps->c_mask2 && stream->ps->period!=1) {
+             // stream has frame-hopping CSPLITS and period isn't 1:
+             // 2 sitds required for each packet
+            allocate_sitds(stream, ehci, urb, mem_flags);
+        }
 		sitd_link_urb (ehci, urb, ehci->periodic_size << 3, stream);
 	} else if (status > 0) {
 		status = 0;
