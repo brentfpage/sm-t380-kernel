@@ -2084,7 +2084,7 @@ static int allocate_sitds(
 	struct ehci_iso_stream	*stream,
 	struct ehci_hcd		*ehci,
 	struct urb		*urb,
-	struct ehci_iso_sched	*iso_sched;
+	struct ehci_iso_sched	*iso_sched,
 	gfp_t			mem_flags
     )
 {
