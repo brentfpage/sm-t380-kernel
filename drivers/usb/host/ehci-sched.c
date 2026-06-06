@@ -2084,10 +2084,13 @@ static int allocate_sitds(
 	struct ehci_iso_stream	*stream,
 	struct ehci_hcd		*ehci,
 	struct urb		*urb,
+	struct ehci_iso_sched	*iso_sched;
 	gfp_t			mem_flags
     )
 {
 	// caller must hold ehci->lock!
+	struct ehci_sitd	*sitd;
+	dma_addr_t		sitd_dma;
 	int			i;
 	unsigned long		flags;
 	/* allocate/init sITDs */
@@ -2145,7 +2148,7 @@ sitd_urb_transaction (
 
 	sitd_sched_init(ehci, iso_sched, stream, urb);
 	spin_lock_irqsave (&ehci->lock, flags);
-    status = allocate_sitds(stream, ehci, urb, mem_flags);
+    status = allocate_sitds(stream, ehci, urb, iso_sched, mem_flags);
     if(status) {
         spin_unlock_irqrestore(&ehci->lock, flags);
         return status;
@@ -2491,7 +2494,7 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
         if(stream->ps->c_mask2 && stream->ps->period!=1) {
              // stream has frame-hopping CSPLITS and period isn't 1:
              // 2 sitds required for each packet
-            status2 = allocate_sitds(stream, ehci, urb, mem_flags);
+            status2 = allocate_sitds(stream, ehci, urb, urb->hcpriv, mem_flags);
         }
 		sitd_link_urb (ehci, urb, ehci->periodic_size << 3, stream);
 	} else if (status > 0) {
