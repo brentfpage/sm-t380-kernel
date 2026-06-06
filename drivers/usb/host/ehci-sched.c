@@ -2136,7 +2136,6 @@ sitd_urb_transaction (
 )
 {
 	struct ehci_sitd	*sitd;
-	dma_addr_t		sitd_dma;
 	struct ehci_iso_sched	*iso_sched;
 	unsigned long		flags;
     int         status;
