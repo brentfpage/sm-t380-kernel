@@ -2248,7 +2248,7 @@ static void sitd_link_urb(
 
 	ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs++;
 
-    if(stream->ps.c_mask2 && stream->ps.period==1)
+    if(stream->ps.c_mask2 && stream->ps.period!=1)
         /* 
          * there are frame-hopping CSPLITS and the period is 1,
          * so these CSPLITS require an extra sitd for each packet
