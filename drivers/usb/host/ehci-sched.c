@@ -2458,9 +2458,11 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
 		goto done_not_linked;
 	status = iso_stream_schedule(ehci, urb, stream);
 	if (likely(status == 0)) {
-        if(stream->ps->c_mask2 && stream->ps->period!=1) {
-             // stream has frame-hopping CSPLITS and period isn't 1:
-             // 2 sitds required for each packet
+        if(stream->ps.c_mask2 && stream->ps.period!=1) {
+            /*
+             * stream has frame-hopping CSPLITS and period isn't 1:
+             * 2 sitds required for each packet
+             */
             status2 = allocate_sitds(stream, ehci, urb, urb->hcpriv, mem_flags);
         }
 		sitd_link_urb (ehci, urb, ehci->periodic_size << 3, stream);
