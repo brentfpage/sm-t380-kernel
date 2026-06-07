@@ -2472,7 +2472,6 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
 	}
     if(status<0 || status2<0)
 		usb_hcd_unlink_urb_from_ep(ehci_to_hcd(ehci), urb);
-	}
  done_not_linked:
 	spin_unlock_irqrestore (&ehci->lock, flags);
  done:
