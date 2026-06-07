@@ -2135,7 +2135,6 @@ sitd_urb_transaction (
 	gfp_t			mem_flags
 )
 {
-	struct ehci_sitd	*sitd;
 	struct ehci_iso_sched	*iso_sched;
 	unsigned long		flags;
     int         status;
