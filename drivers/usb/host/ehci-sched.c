@@ -1337,7 +1337,7 @@ static void reserve_release_iso_bandwidth(struct ehci_hcd *ehci,
 {
 	unsigned		uframe;
 	unsigned		i, j;
-	unsigned		s_mask, c_mask, m;
+	unsigned		s_mask, c_mask, c_mask2, m;
 	int			usecs = stream->ps.usecs;
 	int			c_usecs = stream->ps.c_usecs;
 	int			tt_usecs = stream->ps.tt_usecs;
@@ -1363,8 +1363,8 @@ static void reserve_release_iso_bandwidth(struct ehci_hcd *ehci,
 	} else {			/* Full speed */
 		s_mask = stream->ps.cs_mask;
 		c_mask = s_mask >> 8;
+		c_mask2 = stream->ps.cs_mask >> 8;
 
-		/* NOTE: adjustment needed for frame overflow */
 		for (i = uframe; i < EHCI_BANDWIDTH_SIZE;
 				i += stream->ps.bw_uperiod) {
 			for ((j = stream->ps.phase_uf, m = 1 << j); j < 8;
@@ -1373,6 +1373,9 @@ static void reserve_release_iso_bandwidth(struct ehci_hcd *ehci,
 					ehci->bandwidth[i+j] += usecs;
 				else if (c_mask & m)
 					ehci->bandwidth[i+j] += c_usecs;
+                /* case below: for frame-hopping CSPLITS. */
+                if (c_mask2 & m)
+					ehci->bandwidth[(i+8+j)%EHCI_BANDWIDTH_SIZE] += c_usecs;
 			}
 		}
 
