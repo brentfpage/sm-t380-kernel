@@ -1363,7 +1363,7 @@ static void reserve_release_iso_bandwidth(struct ehci_hcd *ehci,
 	} else {			/* Full speed */
 		s_mask = stream->ps.cs_mask;
 		c_mask = s_mask >> 8;
-		c_mask2 = stream->ps.cs_mask >> 8;
+		c_mask2 = stream->ps.c_mask >> 8;
 
 		for (i = uframe; i < EHCI_BANDWIDTH_SIZE;
 				i += stream->ps.bw_uperiod) {
