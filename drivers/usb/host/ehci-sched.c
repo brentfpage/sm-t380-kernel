@@ -2610,7 +2610,7 @@ restart:
 			break;
 
 		/* The last frame may still have active siTDs */
-		ehci->last_iso_frame = frame;
+		ehci->last_iso_frame = frame-1;
 		frame = (frame + 1) & fmask;
 	}
 }
