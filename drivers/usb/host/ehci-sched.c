@@ -2237,7 +2237,7 @@ static void sitd_link_urb(
 				+= stream->bandwidth;
         sitd_before = NULL;
     } else {
-        sitd_before = list_last_entry(&sched->td_list,
+        sitd_before = list_last_entry(&stream->td_list,
                 struct ehci_sitd, sitd_list);
     }
 
@@ -2249,10 +2249,6 @@ static void sitd_link_urb(
 	ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs++;
 
     if(stream->ps.c_mask2 && stream->ps.period!=1)
-        /* 
-         * there are frame-hopping CSPLITS and the period is 1,
-         * so these CSPLITS require an extra sitd for each packet
-         */
         sitd_mult = 2;
     else
         sitd_mult = 1;
