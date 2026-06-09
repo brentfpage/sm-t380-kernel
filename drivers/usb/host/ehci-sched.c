@@ -2190,7 +2190,7 @@ sitd_patch(
         } else  {
             sitd->hw_uframe=stream->c_splits2;
         }
-        transaction |= SITD_STS_STS; /* start in Do Complete Split mode, ehci1 4.12.3.3.2.1*/
+        transaction |= cpu_to_hc32(SITD_STS_STS); /* start in Do Complete Split mode, ehci1 4.12.3.3.2.1*/
     }
 	sitd->hw_results = transaction;
 
@@ -2613,7 +2613,7 @@ restart:
 			break;
 
 		/* The last frame may still have active siTDs */
-		ehci->last_iso_frame = (frame - 1) & fmask;
+		ehci->last_iso_frame = frame & fmask;
 		frame = (frame + 1) & fmask;
 	}
 }
