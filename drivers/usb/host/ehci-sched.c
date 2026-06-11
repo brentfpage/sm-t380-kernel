@@ -2092,7 +2092,7 @@ static int allocate_sitds(
     unsigned long *ehci_lock_flags
     )
 {
-	// caller must hold ehci->lock and provide associated ehci_lock_flags
+	/* caller must hold ehci->lock and provide associated irq flags */
 	struct ehci_sitd	*sitd;
 	dma_addr_t		sitd_dma;
 	int			i;
@@ -2105,7 +2105,9 @@ static int allocate_sitds(
 		if (likely(!list_empty(&stream->free_list))) {
 			sitd = list_first_entry(&stream->free_list,
 					 struct ehci_sitd, sitd_list);
-			if (sitd->frame == ehci->now_frame)
+            /* include frame+1 to accommodate frame-hopping CSPLITS */
+			if (sitd->frame == ehci->now_frame || 
+                    sitd->frame+1 == ehci->now_frame)
 				goto alloc_sitd;
 			list_del (&sitd->sitd_list);
 			sitd_dma = sitd->sitd_dma;
@@ -2613,7 +2615,7 @@ restart:
 			break;
 
 		/* The last frame may still have active siTDs */
-		ehci->last_iso_frame = (frame - 1) & fmask;
+		ehci->last_iso_frame = frame;
 		frame = (frame + 1) & fmask;
 	}
 }
