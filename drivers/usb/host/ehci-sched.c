@@ -2564,7 +2564,8 @@ restart:
 				 * frame is current.
 				 */
 				if (((frame == now_frame) ||
-				     (((frame + 1) & fmask) == now_frame))
+				     (((frame + 1) & fmask) == now_frame) ||
+				     (((frame + 2) & fmask) == now_frame))
 				    && live
 				    && (q.sitd->hw_results &
 					SITD_ACTIVE(ehci))) {
