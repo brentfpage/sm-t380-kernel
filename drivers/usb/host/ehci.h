@@ -491,6 +491,8 @@ struct ehci_iso_stream {
 	unsigned		next_uframe;
 	__hc32			splits; /* C-mask and S-mask */
 	__hc32			c_splits2; /* C-mask for frame-hopping CSPLITS */
+	/* below: status for period=1 streams that require backpointers */
+	bool                    do_backptr; 
 
 	/* the rest is derived from the endpoint descriptor,
 	 * including the extra info for hw_bufp[0..2]

@@ -2288,7 +2288,7 @@ static void sitd_link_urb(
 		sitd = list_entry (sched->td_list.next,
 				struct ehci_sitd, sitd_list);
         if(stream->ps.c_mask2 && sitd_before!=NULL &&
-                ((stream->ps.period==1)||(i%2==1)) ) {
+                ((stream->ps.period==1 && (i!=sched->first_packet || do_backptr))||(i%2==1)) ) {
             sitd->backpointer_sitd_dma = sitd_before->sitd_dma;
         } else {
             sitd->backpointer_sitd_dma = 1;
@@ -2392,6 +2392,7 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 		BUG_ON (sitd->urb == urb);
 	 */
 
+	ehci->do_backptr = urb->error_count==0;
 	/* give urb back to the driver; completion often (re)submits */
 	dev = urb->dev;
 	ehci_urb_done(ehci, urb, 0);
