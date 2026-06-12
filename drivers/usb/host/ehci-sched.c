@@ -2259,7 +2259,7 @@ static void sitd_link_urb(
              * future sitds if they all require and have
              * backpointers (bInterval=1 case).
              */
-            sitd_before==NULL;
+            sitd_before=NULL;
     }
 
 	if (ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs == 0) {
