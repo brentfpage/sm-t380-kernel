@@ -1099,6 +1099,7 @@ iso_stream_init (
 		stream->bandwidth = stream->ps.usecs * 8 /
 				stream->ps.bw_uperiod;
 
+		stream->allow_bkptr_reset=true;
 	} else {
 		u32		addr;
 		int		think_time;
@@ -2244,21 +2245,9 @@ static void sitd_link_urb(
     } else {
         sitd_before = list_last_entry(&stream->td_list,
                 struct ehci_sitd, sitd_list);
+        /* don't add a backpointer to an sitd that's completing soon */
         if(sitd_before->frame == ehci->now_frame ||
             sitd_before->frame + 1 == ehci->now_frame)
-            /* 
-             * say sitd_before requires a subsequent
-             * sitd to have a backpointer to it. if
-             * sitd_before also finishes soon, it's
-             * possible that this backpointer will be
-             * initialized just too late, and that sitd_before
-             * will be returned without data.  then,
-             * the sitd with the backpointer will be stuck
-             * in the Do Complete Split state, and also
-             * won't properly finish.  And so on for all
-             * future sitds if they all require and have
-             * backpointers (bInterval=1 case).
-             */
             sitd_before=NULL;
     }
 
@@ -2288,9 +2277,14 @@ static void sitd_link_urb(
 		sitd = list_entry (sched->td_list.next,
 				struct ehci_sitd, sitd_list);
         if(stream->ps.c_mask2 && sitd_before!=NULL &&
-                ((stream->ps.period==1 && (i!=sched->first_packet || stream->do_backptr))||(i%2==1)) ) {
+                ((stream->ps.period==1 && !stream->reset_backptr)|| i%2==1) ) {
             sitd->backpointer_sitd_dma = sitd_before->sitd_dma;
         } else {
+            if(stream->ps.c_mask2 && stream->ps.period==1) {
+                stream->reset_bkptr=false;
+                stream->allow_bkptr_reset=false;
+                sitd->after_bkptr_reset=true;
+            }
             sitd->backpointer_sitd_dma = 1;
         }
 		list_move_tail (&sitd->sitd_list, &stream->td_list);
@@ -2361,11 +2355,16 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	t = hc32_to_cpup(ehci, &sitd->hw_results);
     has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
 
+	if(sitd->after_bkptr_reset) {
+		stream->allow_bkptr_reset = true;
+	}
+
 	/* report transfer status */
     if(!has_ssplits) { /* just contains frame-hopping CSPLITS */
 		desc->status = 0; /* actual completion status reported by previous sitd */
     } else if (unlikely(t & SITD_ERRS)) {
 		urb->error_count++;
+		stream->reset_bkptr = true && stream->allow_bkptr_reset;
 		if (t & SITD_STS_DBE)
 			desc->status = usb_pipein (urb->pipe)
 				? -ENOSR  /* hc couldn't read */
@@ -2377,12 +2376,12 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	} else if (unlikely(t & SITD_STS_ACTIVE)) {
 		/* URB was too late */
 		urb->error_count++;
+		stream->reset_bkptr= true && stream->allow_bkptr_reset;
 	} else {
 		desc->status = 0;
 		desc->actual_length = desc->length - SITD_LENGTH(t);
 		urb->actual_length += desc->actual_length;
 	}
-	stream->do_backptr = urb->error_count==0;
 
 	/* handle completion now? */
 	if (!sitd->last_in_urb)
