@@ -2244,6 +2244,22 @@ static void sitd_link_urb(
     } else {
         sitd_before = list_last_entry(&stream->td_list,
                 struct ehci_sitd, sitd_list);
+        if(sitd_before->frame == ehci->now_frame ||
+            sitd_before->frame + 1 == ehci->now_frame)
+            /* 
+             * say sitd_before requires a subsequent
+             * sitd to have a backpointer to it. if
+             * sitd_before also finishes soon, it's
+             * possible that this backpointer will be
+             * initialized just too late, and that sitd_before
+             * will be returned without data.  then,
+             * the sitd with the backpointer will be stuck
+             * in the Do Complete Split state, and also
+             * won't properly finish.  And so on for all
+             * future sitds if they all require and have
+             * backpointers (bInterval=1 case).
+             */
+            sitd_before==NULL;
     }
 
 	if (ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs == 0) {
@@ -2271,7 +2287,7 @@ static void sitd_link_urb(
 
 		sitd = list_entry (sched->td_list.next,
 				struct ehci_sitd, sitd_list);
-        if(stream->ps.c_mask2 && !list_empty(&stream->td_list) &&
+        if(stream->ps.c_mask2 && sitd_before!=NULL &&
                 ((stream->ps.period==1)||(i%2==1)) ) {
             sitd->backpointer_sitd_dma = sitd_before->sitd_dma;
         } else {
