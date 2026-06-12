@@ -2355,6 +2355,7 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	t = hc32_to_cpup(ehci, &sitd->hw_results);
     has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
 
+    /* relevent to the period=1 case with frame-hopping CSPLITS */
 	if(sitd->after_bkptr_reset) {
 		stream->allow_bkptr_reset = true;
 	}
