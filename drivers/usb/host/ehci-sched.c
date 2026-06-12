@@ -2277,7 +2277,7 @@ static void sitd_link_urb(
 		sitd = list_entry (sched->td_list.next,
 				struct ehci_sitd, sitd_list);
         if(stream->ps.c_mask2 && sitd_before!=NULL &&
-                ((stream->ps.period==1 && !stream->reset_backptr)|| i%2==1) ) {
+                ((stream->ps.period==1 && !stream->reset_bkptr)|| i%2==1) ) {
             sitd->backpointer_sitd_dma = sitd_before->sitd_dma;
         } else {
             if(stream->ps.c_mask2 && stream->ps.period==1) {
