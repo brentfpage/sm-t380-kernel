@@ -1432,7 +1432,7 @@ sitd_slot_ok (
          * the transaction will initially be configured to have CSPLITS in
          * BuFrame7 as well as BuFrames 0 and 1 of the following frame
          * (HuFrames 0,1,2) */
-        /* below: usb2 spec 11.18.4.3.c paragraph 2 */
+        /* below: usb2 spec 11.18.4.3.c paragraph 3 */
         if(mask & 1) {
             c_mask2 = 1; 
         } else {
@@ -1443,7 +1443,7 @@ sitd_slot_ok (
          * the transaction will initially be configured to have CSPLITS in
          * BuFrames 6 and 7 as well as BuFrame 0 of the following frame
          * (HuFrames 7,0,1) */
-        /* below: usb2 spec 11.18.4.3.c paragraph 1 */
+        /* below: usb2 spec 11.18.4.3.c paragraph 2 */
         if(mask & 1) {
             c_mask2 = 1; 
         }
@@ -2355,7 +2355,7 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	t = hc32_to_cpup(ehci, &sitd->hw_results);
     has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
 
-    /* relevent to the period=1 case with frame-hopping CSPLITS */
+    /* relevant to the period=1 case with frame-hopping CSPLITS */
 	if(sitd->after_bkptr_reset) {
 		stream->allow_bkptr_reset = true;
 	}
