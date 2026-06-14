@@ -1099,7 +1099,6 @@ iso_stream_init (
 		stream->bandwidth = stream->ps.usecs * 8 /
 				stream->ps.bw_uperiod;
 
-		stream->allow_bkptr_reset=true;
 	} else {
 		u32		addr;
 		int		think_time;
@@ -2277,14 +2276,9 @@ static void sitd_link_urb(
 		sitd = list_entry (sched->td_list.next,
 				struct ehci_sitd, sitd_list);
         if(stream->ps.c_mask2 && sitd_before!=NULL &&
-                ((stream->ps.period==1 && !stream->reset_bkptr)|| i%2==1) ) {
+                (stream->ps.period==1 || i%2==1) ) {
             sitd->backpointer_sitd_dma = sitd_before->sitd_dma;
         } else {
-            if(stream->ps.c_mask2 && stream->ps.period==1) {
-                stream->reset_bkptr=false;
-                stream->allow_bkptr_reset=false;
-                sitd->after_bkptr_reset=true;
-            }
             sitd->backpointer_sitd_dma = 1;
         }
 		list_move_tail (&sitd->sitd_list, &stream->td_list);
@@ -2355,17 +2349,11 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	t = hc32_to_cpup(ehci, &sitd->hw_results);
     has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
 
-    /* relevant to the period=1 case with frame-hopping CSPLITS */
-	if(sitd->after_bkptr_reset) {
-		stream->allow_bkptr_reset = true;
-	}
-
 	/* report transfer status */
     if(!has_ssplits) { /* just contains frame-hopping CSPLITS */
 		desc->status = 0; /* actual completion status reported by previous sitd */
     } else if (unlikely(t & SITD_ERRS)) {
 		urb->error_count++;
-		stream->reset_bkptr = true && stream->allow_bkptr_reset;
 		if (t & SITD_STS_DBE)
 			desc->status = usb_pipein (urb->pipe)
 				? -ENOSR  /* hc couldn't read */
@@ -2377,7 +2365,6 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	} else if (unlikely(t & SITD_STS_ACTIVE)) {
 		/* URB was too late */
 		urb->error_count++;
-		stream->reset_bkptr= true && stream->allow_bkptr_reset;
 	} else {
 		desc->status = 0;
 		desc->actual_length = desc->length - SITD_LENGTH(t);

@@ -491,9 +491,6 @@ struct ehci_iso_stream {
 	unsigned		next_uframe;
 	__hc32			splits; /* C-mask and S-mask */
 	__hc32			c_splits2; /* C-mask for frame-hopping CSPLITS */
-	/* below: status for period=1 streams that require backpointers */
-	bool                    reset_bkptr; 
-	bool                    allow_bkptr_reset; 
 
 	/* the rest is derived from the endpoint descriptor,
 	 * including the extra info for hw_bufp[0..2]
@@ -587,7 +584,6 @@ struct ehci_sitd {
 	union ehci_shadow	sitd_next;	/* ptr to periodic q entry */
 
     bool            last_in_urb;
-    bool            after_bkptr_reset;
 	struct urb		*urb;
 	struct ehci_iso_stream	*stream;	/* endpoint's queue */
 	struct list_head	sitd_list;	/* list of stream's sitds */
