@@ -2568,7 +2568,8 @@ restart:
 				 * frame is current.
 				 */
 				if (((frame == now_frame) ||
-				     (((frame + 1) & fmask) == now_frame))
+				     (((frame + 1) & fmask) == now_frame) || 
+				     (((frame + 2) & fmask) == now_frame))
 				    && live
 				    && (q.sitd->hw_results &
 					SITD_ACTIVE(ehci))) {
@@ -2619,7 +2620,7 @@ restart:
 			break;
 
 		/* The last frame may still have active siTDs */
-		ehci->last_iso_frame = frame;
+		ehci->last_iso_frame = (frame-1) & fmask;
 		frame = (frame + 1) & fmask;
 	}
 }
