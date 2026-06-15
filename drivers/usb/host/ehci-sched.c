@@ -2490,7 +2490,7 @@ static void scan_isoc(struct ehci_hcd *ehci)
 {
 	unsigned	uf, now_frame, frame;
 	unsigned	fmask = ehci->periodic_size - 1;
-	bool		modified, live;
+	bool		modified, live, has_ssplits;
 
 	/*
 	 * When running, scan from last scan point up to "now"
@@ -2567,10 +2567,15 @@ restart:
 				 * later processing ... check the next entry.
 				 * No need to check for activity unless the
 				 * frame is current.
+				 * delay frame expiration by one frame past now_frame
+				 * to accommodate HW delay (22e1869).  
+				 * delay one further frame
+				 * to accommodate frame-hopping csplits.
 				 */
+				has_ssplits = hc32_to_cpu(ehci, q.sitd->hw_uframe) & 0x00ff;
 				if (((frame == now_frame) ||
 				     (((frame + 1) & fmask) == now_frame) || 
-				     (((frame + 2) & fmask) == now_frame))
+				     (((frame + 2) & fmask) == now_frame)&&has_ssplits)
 				    && live
 				    && (q.sitd->hw_results &
 					SITD_ACTIVE(ehci))) {
