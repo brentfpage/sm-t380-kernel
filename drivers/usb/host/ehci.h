@@ -498,6 +498,7 @@ struct ehci_iso_stream {
 	u16			uperiod;	/* period in uframes */
 	u16			maxp;
 	unsigned		bandwidth;
+    bool        force_sitd_done;
 
 	/* This is used to initialize iTD's hw_bufp fields */
 	__hc32			buf0;
@@ -583,7 +584,7 @@ struct ehci_sitd {
 	dma_addr_t		backpointer_sitd_dma;
 	union ehci_shadow	sitd_next;	/* ptr to periodic q entry */
 
-    bool            last_in_urb;
+    bool            first_in_pair;
 	struct urb		*urb;
 	struct ehci_iso_stream	*stream;	/* endpoint's queue */
 	struct list_head	sitd_list;	/* list of stream's sitds */

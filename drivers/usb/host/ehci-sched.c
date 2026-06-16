@@ -2288,10 +2288,9 @@ static void sitd_link_urb(
 
         if(stream->ps.c_mask2 && (stream->ps.period!=1)) {
              packet = i/2;
-             sitd->last_in_urb = i==(2*urb->number_of_packets - 1);
+             sitd->first_in_pair = i%2 == 0;
         } else {
              packet = i;
-             sitd->last_in_urb = i==(urb->number_of_packets-1);
         }
 		sitd_patch(ehci, stream, sitd, sched, packet);
 		sitd_link(ehci, (next_uframe >> 3) & (ehci->periodic_size - 1),
@@ -2372,8 +2371,11 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 		urb->actual_length += desc->actual_length;
 	}
 
+    /* next sitd just contains frame-hopping CSPLITS for this sitd */
+    sitd->stream->force_sitd_done = sitd->first_in_pair;
+
 	/* handle completion now? */
-	if (!sitd->last_in_urb)
+	if (likely ((urb_index + 1) != urb->number_of_packets || sitd->first_in_pair))
 		goto done;
 
 	/* ASSERT: it's really the last sitd for this urb
@@ -2572,13 +2574,14 @@ restart:
 				 * delay one further frame
 				 * to accommodate frame-hopping csplits.
 				 */
-				has_ssplits = hc32_to_cpu(ehci, q.sitd->hw_uframe) & 0x00ff;
-				if (frame == now_frame ||
+				if ((frame == now_frame ||
 				     ((frame + 1) & fmask) == now_frame || 
-				     (((frame + 2) & fmask) == now_frame && has_ssplits)
+				     ((frame + 2) & fmask) == now_frame)
 				    && live
 				    && (q.sitd->hw_results &
-					SITD_ACTIVE(ehci))) {
+					SITD_ACTIVE(ehci)) &&
+                    !q.sitd->stream->force_sitd_done
+                    ) {
 
 					q_p = &q.sitd->sitd_next;
 					hw_p = &q.sitd->hw_next;
