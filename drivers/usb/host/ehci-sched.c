@@ -2573,9 +2573,9 @@ restart:
 				 * to accommodate frame-hopping csplits.
 				 */
 				has_ssplits = hc32_to_cpu(ehci, q.sitd->hw_uframe) & 0x00ff;
-				if (((frame == now_frame) ||
-				     (((frame + 1) & fmask) == now_frame) || 
-				     (((frame + 2) & fmask) == now_frame)&&has_ssplits)
+				if (frame == now_frame ||
+				     ((frame + 1) & fmask) == now_frame || 
+				     (((frame + 2) & fmask) == now_frame && has_ssplits)
 				    && live
 				    && (q.sitd->hw_results &
 					SITD_ACTIVE(ehci))) {
