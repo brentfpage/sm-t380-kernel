@@ -2492,7 +2492,7 @@ static void scan_isoc(struct ehci_hcd *ehci)
 {
 	unsigned	uf, now_frame, frame;
 	unsigned	fmask = ehci->periodic_size - 1;
-	bool		modified, live, has_ssplits;
+	bool		modified, live;
 
 	/*
 	 * When running, scan from last scan point up to "now"
