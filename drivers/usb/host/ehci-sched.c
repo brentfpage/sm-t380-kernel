@@ -2344,15 +2344,17 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	bool					retval = false;
     bool                has_ssplits;
 
+    has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
+    if(!has_ssplits) { /* just contains frame-hopping CSPLITS */
+		goto done;
+    }
+
 	urb_index = sitd->index;
 	desc = &urb->iso_frame_desc [urb_index];
 	t = hc32_to_cpup(ehci, &sitd->hw_results);
-    has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
 
 	/* report transfer status */
-    if(!has_ssplits) { /* just contains frame-hopping CSPLITS */
-		; /* completion status reported by previous sitd */
-    } else if (unlikely(t & SITD_ERRS)) {
+    if (unlikely(t & SITD_ERRS)) {
 		urb->error_count++;
 		if (t & SITD_STS_DBE)
 			desc->status = usb_pipein (urb->pipe)
@@ -2371,11 +2373,8 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 		urb->actual_length += desc->actual_length;
 	}
 
-    /* next sitd just contains frame-hopping CSPLITS for this sitd */
-    sitd->stream->force_sitd_done = sitd->first_in_pair;
-
 	/* handle completion now? */
-	if (likely ((urb_index + 1) != urb->number_of_packets || sitd->first_in_pair))
+	if (likely ((urb_index + 1) != urb->number_of_packets))
 		goto done;
 
 	/* ASSERT: it's really the last sitd for this urb
@@ -2492,7 +2491,7 @@ static void scan_isoc(struct ehci_hcd *ehci)
 {
 	unsigned	uf, now_frame, frame;
 	unsigned	fmask = ehci->periodic_size - 1;
-	bool		modified, live;
+	bool		modified, live, has_ssplits;
 
 	/*
 	 * When running, scan from last scan point up to "now"
@@ -2569,19 +2568,24 @@ restart:
 				 * later processing ... check the next entry.
 				 * No need to check for activity unless the
 				 * frame is current.
-				 * delay frame expiration by one frame past now_frame
-				 * to accommodate HW delay (22e1869).  
-				 * delay one further frame
-				 * to accommodate frame-hopping csplits.
+				 * delay the expiration frame by one frame past now_frame
+				 * to accommodate HW delay (commit 22e1869).  
+				 * delay it one further frame
+				 * to accommodate frame-hopping csplits.  If an sitd
+                 * only has frame-hopping csplits, call sitd_complete on it no
+                 * matter what.  it will still be in the HW queue, and
+                 * even though it will be added to the SW free list,
+                 * protections in allocate_sitds ensure it won't be 
+                 * reused too soon.
 				 */
+                has_ssplits = hc32_to_cpu(ehci, q.sitd->hw_uframe) & 0x00ff;
 				if ((frame == now_frame ||
 				     ((frame + 1) & fmask) == now_frame || 
 				     ((frame + 2) & fmask) == now_frame)
 				    && live
 				    && (q.sitd->hw_results &
-					SITD_ACTIVE(ehci)) &&
-                    !q.sitd->stream->force_sitd_done
-                    ) {
+					SITD_ACTIVE(ehci))
+                    && has_ssplits) {
 
 					q_p = &q.sitd->sitd_next;
 					hw_p = &q.sitd->hw_next;

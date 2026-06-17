@@ -498,7 +498,6 @@ struct ehci_iso_stream {
 	u16			uperiod;	/* period in uframes */
 	u16			maxp;
 	unsigned		bandwidth;
-    bool        force_sitd_done;
 
 	/* This is used to initialize iTD's hw_bufp fields */
 	__hc32			buf0;
