@@ -2184,14 +2184,21 @@ sitd_patch(
 	sitd->hw_backpointer = cpu_to_hc32(ehci, sitd->backpointer_sitd_dma); 
     transaction = uf->transaction;
 
-    if(sitd->backpointer_sitd_dma==1) { /* null backpointer */
-        sitd->hw_uframe=stream->splits;
-    } else { 
-        if(stream->ps.period==1) {
-            sitd->hw_uframe=stream->splits|stream->c_splits2;
-        } else  {
-            sitd->hw_uframe=stream->c_splits2;
-        }
+    if(stream->ps.period!=1 && sitd->backpointer_sitd_dma!=1) {
+        sitd->hw_uframe=stream->c_splits2;
+    } else {
+        sitd->hw_uframe=stream->splits|stream->c_splits2;
+    }
+
+//     if(sitd->backpointer_sitd_dma==1) { /* null backpointer */
+//         sitd->hw_uframe=stream->splits;
+//     } else { 
+    if(sitd->backpointer_sitd_dma!=1) { 
+//         if(stream->ps.period==1) {
+//             sitd->hw_uframe=stream->splits|stream->c_splits2;
+//         } else  {
+//             sitd->hw_uframe=stream->c_splits2;
+//         }
         transaction |= cpu_to_hc32(ehci, SITD_STS_STS); /* start in Do Complete Split mode, ehci1 4.12.3.3.2.1*/
     }
 	sitd->hw_results = transaction;
@@ -2342,13 +2349,13 @@ static bool sitd_complete(struct ehci_hcd *ehci, struct ehci_sitd *sitd)
 	struct ehci_iso_stream			*stream = sitd->stream;
 	struct usb_device			*dev;
 	bool					retval = false;
-    bool                has_ssplits;
 
-    stream->force_sitd_done = sitd->first_in_pair;
-    has_ssplits = hc32_to_cpu(ehci, sitd->hw_uframe) & 0x00ff;
-    if(!has_ssplits) { /* just contains frame-hopping CSPLITS */
-		goto done;
+    if(stream->force_sitd_done) {
+        /* sitd is the 2nd in a pair for a bIntrvl!=1 case w/ bkptrs */
+        stream->force_sitd_done = false;
+        goto done;
     }
+    stream->force_sitd_done = sitd->first_in_pair; /* for next sitd */
 
 	urb_index = sitd->index;
 	desc = &urb->iso_frame_desc [urb_index];
