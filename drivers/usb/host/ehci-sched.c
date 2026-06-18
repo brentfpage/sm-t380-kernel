@@ -1367,7 +1367,7 @@ static void reserve_release_iso_bandwidth(struct ehci_hcd *ehci,
 
 		for (i = uframe; i < EHCI_BANDWIDTH_SIZE;
 				i += stream->ps.bw_uperiod) {
-			for ((j = stream->ps.phase_uf, m = 1 << j); j < 8;
+			for ((j = 0, m = 1); j < 8;
 					(++j, m <<= 1)) {
 				if (s_mask & m)
 					ehci->bandwidth[i+j] += usecs;
@@ -1424,6 +1424,15 @@ sitd_slot_ok (
 	unsigned		frame, uf;
 
 	mask = stream->ps.cs_mask << (uframe & 7);
+
+	/* for OUT, don't wrap SSPLIT into H-microframe 7 */
+	if (((stream->ps.cs_mask & 0xff) << (uframe & 7)) >= (1 << 7))
+		return 0;
+
+	/* for IN, don't wrap CSPLIT too far into next frame */
+	if (mask & ~(0x80000-1))
+		return 0;
+
     c_mask2 = mask >> 16;
     mask = mask & 0xffff;
     if((c_mask2 & 1) && (c_mask2 & 1<<1) && (c_mask2 & 1<<2)) {
@@ -1449,10 +1458,6 @@ sitd_slot_ok (
     }
     if((c_mask2 & mask & 1<<1))
         return 0; /* ehci1 4.12.3.1 */
-
-	/* for OUT, don't wrap SSPLIT into H-microframe 7 */
-	if (((stream->ps.cs_mask & 0xff) << (uframe & 7)) >= (1 << 7))
-		return 0;
 
 	/* check bandwidth */
 	uframe &= stream->ps.bw_uperiod - 1;
@@ -1498,6 +1503,13 @@ sitd_slot_ok (
 				if (ehci->bandwidth[uf+i] > max_used)
 					return 0;
 			}
+            tmp = 1;
+			for (i = 0; i < 2; (++i, tmp <<= 1)) {
+				if ((stream->ps.c_mask2 & tmp) == 0)
+                    continue;
+				if (ehci->bandwidth[(uf+8+i) % EHCI_BANDWIDTH_SIZE] > max_used)
+					return 0;
+            }
 		}
 
 		uframe += stream->ps.bw_uperiod;
@@ -2189,7 +2201,7 @@ sitd_patch(
     } else {
         /* 
          * frame-hopping CSPLITS get skipped if the sitd doesn't
-         * start in the Do Complete Split state
+         * start in the Do Complete Split state.
          */
         sitd->hw_uframe=stream->splits|stream->c_splits2;
     }
